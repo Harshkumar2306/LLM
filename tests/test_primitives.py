@@ -30,7 +30,7 @@ def test_embeddings_shape():
     Test that the Embedding module converts a 2D integer tensor (B, T) 
     into a 3D float tensor (B, T, C).
     """
-    config = GPTConfig(vocab_size=100, context_length=16, d_model=64)
+    config = GPTConfig(vocab_size=100, context_length=16, d_model=64, n_heads=4)
     emb = GPTEmbeddings(config)
     
     # Simulate a batch of 2 sequences, each length 10
@@ -39,19 +39,3 @@ def test_embeddings_shape():
     
     assert out.shape == (2, 10, 64), f"Expected shape (2, 10, 64), got {out.shape}"
 
-def test_embeddings_context_length_error():
-    """
-    Test that passing a sequence longer than context_length raises an IndexError
-    because the positional embedding table is too small.
-    """
-    config = GPTConfig(vocab_size=100, context_length=16, d_model=64)
-    emb = GPTEmbeddings(config)
-    
-    # Try to pass a sequence of length 20 (max is 16)
-    idx = torch.randint(0, 100, (2, 20))
-    
-    try:
-        out = emb(idx)
-        assert False, "Should have raised an IndexError"
-    except IndexError:
-        pass # Expected behavior

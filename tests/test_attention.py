@@ -17,11 +17,11 @@ def test_attention_shape():
     x = torch.randn(2, 10, 64)
     
     # Test Flash
-    out_flash = attn(x, use_flash=True)
+    out_flash, _ = attn(x, use_flash=True)
     assert out_flash.shape == (2, 10, 64), f"Flash output shape incorrect: {out_flash.shape}"
     
     # Test Manual
-    out_manual = attn(x, use_flash=False)
+    out_manual, _ = attn(x, use_flash=False)
     assert out_manual.shape == (2, 10, 64), f"Manual output shape incorrect: {out_manual.shape}"
 
 def test_causal_masking_correctness():
@@ -39,8 +39,8 @@ def test_causal_masking_correctness():
     x2 = x1.clone()
     x2[0, 4, :] = torch.randn(64)
     
-    out1 = attn(x1, use_flash=False)
-    out2 = attn(x2, use_flash=False)
+    out1, _ = attn(x1, use_flash=False)
+    out2, _ = attn(x2, use_flash=False)
     
     # Outputs at T=0, 1, 2, 3 must be exactly equal
     assert torch.allclose(out1[:, :4, :], out2[:, :4, :], atol=1e-6), "Causality broken: past tokens changed when future token changed."
@@ -58,8 +58,8 @@ def test_manual_vs_flash_equivalence():
     
     x = torch.randn(2, 10, 64)
     
-    out_flash = attn(x, use_flash=True)
-    out_manual = attn(x, use_flash=False)
+    out_flash, _ = attn(x, use_flash=True)
+    out_manual, _ = attn(x, use_flash=False)
     
     # Floating point precision requires atol=1e-5
     diff = (out_flash - out_manual).abs().max().item()

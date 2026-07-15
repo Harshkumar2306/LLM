@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.gpt_config import GPTConfig
 from core.embeddings import GPTEmbeddings
 from core.block import Block
+from core.rope import precompute_freqs_cis
 
 class GPT(nn.Module):
     """
@@ -37,6 +38,13 @@ class GPT(nn.Module):
         # same mathematical operation as predicting a word).
         self.lm_head.weight = self.embeddings.wte.weight
         
+        # --- RoPE Frequencies ---
+        # Precompute the complex exponential frequencies for RoPE.
+        # We register it as a buffer so it's pushed to the correct device automatically.
+        head_dim = config.d_model // config.n_heads
+        freqs_cis = precompute_freqs_cis(dim=head_dim, end=config.context_length * 2)
+        self.register_buffer("freqs_cis", freqs_cis)
+        
         # Initialize all weights using our specific Gaussian strategy
         self.apply(self._init_weights)
 
@@ -57,26 +65,37 @@ class GPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx: torch.Tensor, targets: torch.Tensor = None, use_flash: bool = True):
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor = None, use_flash: bool = True, kv_cache: list = None, pos_offset: int = 0):
         """
         The full forward pass.
         Args:
             idx: Tensor of shape (Batch, Time) containing integer token IDs.
             targets: Optional Tensor of shape (Batch, Time) containing integer target IDs.
             use_flash: Whether to use optimized FlashAttention.
+            kv_cache: Optional list of tuples containing (past_k, past_v) for each layer.
+            pos_offset: Integer offset for positional embeddings.
         Returns:
             logits: Tensor of shape (Batch, Time, Vocab_Size) containing unnormalized predictions.
             loss: Scalar tensor if targets are provided, else None.
+            present_kv_cache: List of current (past_k, past_v) for each layer if kv_cache was provided.
         """
         B, T = idx.size()
-        assert T <= self.config.context_length, f"Sequence length {T} exceeds context {self.config.context_length}"
+        assert T + pos_offset <= self.config.context_length, f"Sequence length {T + pos_offset} exceeds context {self.config.context_length}"
 
         # 1. Start the residual stream: (B, T) -> (B, T, C)
-        x = self.embeddings(idx)
+        x = self.embeddings(idx, pos_offset=pos_offset)
+        
+        # Slice freqs_cis for the current sequence length and offset
+        freqs_cis = self.freqs_cis[pos_offset:pos_offset+T]
 
         # 2. Pass through all blocks (Information is added to the stream sequentially)
-        for block in self.blocks:
-            x = block(x, use_flash=use_flash)
+        present_kv_cache = [] if kv_cache is not None else None
+        
+        for i, block in enumerate(self.blocks):
+            layer_cache = kv_cache[i] if kv_cache is not None else None
+            x, present_kv = block(x, use_flash=use_flash, kv_cache=layer_cache, freqs_cis=freqs_cis)
+            if present_kv_cache is not None:
+                present_kv_cache.append(present_kv)
                 
         # 3. Final LayerNorm
         x = self.ln_f(x)

@@ -8,6 +8,7 @@ import os
 # Ensure config can be imported if run directly
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.gpt_config import GPTConfig
+from core.rope import apply_rotary_emb
 
 class CausalSelfAttention(nn.Module):
     """
@@ -74,12 +75,16 @@ class CausalSelfAttention(nn.Module):
             is_causal=True # Handles the lower-triangular masking automatically
         )
 
-    def forward(self, x: torch.Tensor, use_flash: bool = True) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, use_flash: bool = True, kv_cache: tuple = None, freqs_cis: torch.Tensor = None) -> tuple:
         """
         Forward pass.
         Args:
             x: Tensor of shape (Batch, Time, Channels)
             use_flash: Toggle between optimized FlashAttention and educational Manual Attention.
+            kv_cache: Optional tuple of (past_k, past_v) from previous step.
+            freqs_cis: Complex frequencies for RoPE.
+        Returns:
+            Tuple of (output_tensor, current_kv_cache)
         """
         B, T, C = x.size()
         
@@ -91,22 +96,39 @@ class CausalSelfAttention(nn.Module):
         q, k, v = qkv.split(self.d_model, dim=2)
         
         # 3. Reshape for Multi-Head Attention
-        # (B, T, C) -> (B, T, n_heads, head_dim) -> transpose -> (B, n_heads, T, head_dim)
-        q = q.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
-        k = k.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
-        v = v.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
+        # (B, T, C) -> (B, T, n_heads, head_dim)
+        q = q.view(B, T, self.n_heads, self.head_dim)
+        k = k.view(B, T, self.n_heads, self.head_dim)
+        v = v.view(B, T, self.n_heads, self.head_dim)
         
-        # 4. Dispatch to the selected implementation
+        # Apply RoPE to Queries and Keys
+        if freqs_cis is not None:
+            q, k = apply_rotary_emb(q, k, freqs_cis)
+            
+        # Transpose for attention: -> (B, n_heads, T, head_dim)
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+        
+        # 4. Handle KV Cache
+        if kv_cache is not None:
+            past_k, past_v = kv_cache
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
+        
+        present_kv = (k, v)
+        
+        # 5. Dispatch to the selected implementation
         if use_flash and hasattr(F, 'scaled_dot_product_attention'):
             y = self._flash_attention(q, k, v)
         else:
             y = self._manual_attention(q, k, v, T)
             
-        # 5. Re-assemble heads
+        # 6. Re-assemble heads
         # (B, n_heads, T, head_dim) -> (B, T, n_heads, head_dim) -> (B, T, C)
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         
-        # 6. Output projection and dropout
+        # 7. Output projection and dropout
         y = self.resid_dropout(self.c_proj(y))
         
-        return y
+        return y, present_kv
