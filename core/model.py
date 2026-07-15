@@ -57,26 +57,34 @@ class GPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx: torch.Tensor, targets: torch.Tensor = None, use_flash: bool = True):
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor = None, use_flash: bool = True, kv_cache: list = None, pos_offset: int = 0):
         """
         The full forward pass.
         Args:
             idx: Tensor of shape (Batch, Time) containing integer token IDs.
             targets: Optional Tensor of shape (Batch, Time) containing integer target IDs.
             use_flash: Whether to use optimized FlashAttention.
+            kv_cache: Optional list of tuples containing (past_k, past_v) for each layer.
+            pos_offset: Integer offset for positional embeddings.
         Returns:
             logits: Tensor of shape (Batch, Time, Vocab_Size) containing unnormalized predictions.
             loss: Scalar tensor if targets are provided, else None.
+            present_kv_cache: List of current (past_k, past_v) for each layer if kv_cache was provided.
         """
         B, T = idx.size()
-        assert T <= self.config.context_length, f"Sequence length {T} exceeds context {self.config.context_length}"
+        assert T + pos_offset <= self.config.context_length, f"Sequence length {T + pos_offset} exceeds context {self.config.context_length}"
 
         # 1. Start the residual stream: (B, T) -> (B, T, C)
-        x = self.embeddings(idx)
+        x = self.embeddings(idx, pos_offset=pos_offset)
 
         # 2. Pass through all blocks (Information is added to the stream sequentially)
-        for block in self.blocks:
-            x = block(x, use_flash=use_flash)
+        present_kv_cache = [] if kv_cache is not None else None
+        
+        for i, block in enumerate(self.blocks):
+            layer_cache = kv_cache[i] if kv_cache is not None else None
+            x, present_kv = block(x, use_flash=use_flash, kv_cache=layer_cache)
+            if present_kv_cache is not None:
+                present_kv_cache.append(present_kv)
                 
         # 3. Final LayerNorm
         x = self.ln_f(x)
@@ -94,11 +102,12 @@ class GPT(nn.Module):
             
             # CrossEntropyLoss expects logits and integer targets
             loss = torch.nn.functional.cross_entropy(logits_flat, targets_flat)
-        
+        if kv_cache is not None:
+            return logits, loss, present_kv_cache
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx: torch.Tensor, max_new_tokens: int, temperature: float = 1.0, top_k: int = None):
+    def generate(self, idx: torch.Tensor, max_new_tokens: int, temperature: float = 1.0, top_k: int = None, use_cache: bool = False):
         """
         Auto-regressively generates new tokens.
         Args:
@@ -106,16 +115,30 @@ class GPT(nn.Module):
             max_new_tokens: Number of tokens to generate.
             temperature: Scales logits before softmax. T < 1.0 reduces randomness. T=0.0 is greedy.
             top_k: If set, only samples from the top K most probable tokens.
+            use_cache: If True, uses KV caching for O(N) generation instead of O(N^2).
         Returns:
             idx: (Batch, Time + max_new_tokens) sequence of generated tokens.
         """
         self.eval()
-        for _ in range(max_new_tokens):
-            # Crop the sequence to the maximum context length
-            idx_cond = idx if idx.size(1) <= self.config.context_length else idx[:, -self.config.context_length:]
+        
+        kv_cache = [None] * self.config.n_layers if use_cache else None
+        
+        for step in range(max_new_tokens):
+            if use_cache and step > 0:
+                # We only need to pass the very last token, along with the cache of all past tokens
+                idx_cond = idx[:, -1:]
+                pos_offset = idx.size(1) - 1
+            else:
+                # First step or no caching: pass the full context (cropped to max length)
+                idx_cond = idx if idx.size(1) <= self.config.context_length else idx[:, -self.config.context_length:]
+                pos_offset = 0
             
             # Forward pass to get predictions
-            logits, _ = self(idx_cond, targets=None)
+            out = self(idx_cond, targets=None, kv_cache=kv_cache, pos_offset=pos_offset)
+            if use_cache:
+                logits, _, kv_cache = out
+            else:
+                logits, _ = out
             
             # Pluck the logits at the final step and scale by temperature
             logits = logits[:, -1, :] # (Batch, Vocab_Size)

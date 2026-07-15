@@ -1,0 +1,5 @@
+runs/
+data/*.bin
+__pycache__/
+*.pyc
+.DS_Store

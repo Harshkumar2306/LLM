@@ -23,19 +23,20 @@ class GPTEmbeddings(nn.Module):
         # Regularization applied immediately after combining embeddings
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, idx: torch.Tensor) -> torch.Tensor:
+    def forward(self, idx: torch.Tensor, pos_offset: int = 0) -> torch.Tensor:
         """
         Forward pass.
         Args:
             idx: Tensor of shape (Batch, Time) containing integer token IDs.
+            pos_offset: Integer offset for positional embeddings (used in KV caching).
         Returns:
             Tensor of shape (Batch, Time, Channels)
         """
         batch_size, seq_len = idx.size()
         
-        # Generate position integers: [0, 1, 2, ..., seq_len-1]
+        # Generate position integers offset by pos_offset
         # device=idx.device ensures it is created on the GPU if idx is on the GPU
-        pos = torch.arange(0, seq_len, dtype=torch.long, device=idx.device)
+        pos = torch.arange(pos_offset, pos_offset + seq_len, dtype=torch.long, device=idx.device)
         
         # Extract the dense vectors
         tok_emb = self.wte(idx) # shape: (Batch, Time, Channels)

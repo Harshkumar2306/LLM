@@ -74,12 +74,15 @@ class CausalSelfAttention(nn.Module):
             is_causal=True # Handles the lower-triangular masking automatically
         )
 
-    def forward(self, x: torch.Tensor, use_flash: bool = True) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, use_flash: bool = True, kv_cache: tuple = None) -> tuple:
         """
         Forward pass.
         Args:
             x: Tensor of shape (Batch, Time, Channels)
             use_flash: Toggle between optimized FlashAttention and educational Manual Attention.
+            kv_cache: Optional tuple of (past_k, past_v) from previous step.
+        Returns:
+            Tuple of (output_tensor, current_kv_cache)
         """
         B, T, C = x.size()
         
@@ -96,17 +99,38 @@ class CausalSelfAttention(nn.Module):
         k = k.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
         v = v.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
         
-        # 4. Dispatch to the selected implementation
+        # 4. Handle KV Cache
+        if kv_cache is not None:
+            past_k, past_v = kv_cache
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
+        
+        present_kv = (k, v)
+        
+        # 5. Dispatch to the selected implementation
         if use_flash and hasattr(F, 'scaled_dot_product_attention'):
-            y = self._flash_attention(q, k, v)
+            # If using kv_cache, sequence length of q (1) != k (seq_len), so causal=False is required.
+            # Since Q is only the latest token, it should attend to all tokens in K anyway.
+            is_causal = kv_cache is None
+            y = F.scaled_dot_product_attention(
+                q, k, v, 
+                dropout_p=self.dropout_p if self.training else 0.0, 
+                is_causal=is_causal
+            )
         else:
-            y = self._manual_attention(q, k, v, T)
+            # Manual attention
+            scores = q @ k.transpose(-2, -1) * (1.0 / math.sqrt(self.head_dim))
+            if kv_cache is None:
+                scores = scores.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
+            probs = F.softmax(scores, dim=-1)
+            probs = self.attn_dropout(probs)
+            y = probs @ v
             
-        # 5. Re-assemble heads
+        # 6. Re-assemble heads
         # (B, n_heads, T, head_dim) -> (B, T, n_heads, head_dim) -> (B, T, C)
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         
-        # 6. Output projection and dropout
+        # 7. Output projection and dropout
         y = self.resid_dropout(self.c_proj(y))
         
-        return y
+        return y, present_kv

@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('--temperature', type=float, default=0.8, help="Temperature for sampling (0.0 = greedy)")
     parser.add_argument('--top_k', type=int, default=50, help="Top-K sampling")
     parser.add_argument('--device', type=str, default=None, help="cpu, mps, cuda")
+    parser.add_argument('--use_cache', action='store_true', help="Use KV caching for faster generation")
     return parser.parse_args()
 
 def get_default_device():
@@ -72,12 +73,24 @@ def main():
     t0 = time.time()
     
     # 5. Generation Loop (Streaming)
+    kv_cache = [None] * model.config.n_layers if args.use_cache else None
+    
     with torch.no_grad():
-        for _ in range(args.max_new_tokens):
-            x_cond = x if x.size(1) <= model.config.context_length else x[:, -model.config.context_length:]
-            out = model(x_cond, targets=None)
+        for step in range(args.max_new_tokens):
+            if args.use_cache and step > 0:
+                x_cond = x[:, -1:]
+                pos_offset = x.size(1) - 1
+            else:
+                x_cond = x if x.size(1) <= model.config.context_length else x[:, -model.config.context_length:]
+                pos_offset = 0
                 
-            logits = out[0]
+            out = model(x_cond, targets=None, kv_cache=kv_cache, pos_offset=pos_offset)
+            
+            if args.use_cache:
+                logits, _, kv_cache = out
+            else:
+                logits, _ = out
+                
             logits = logits[:, -1, :] # (Batch, Vocab_Size)
             
             if args.temperature == 0.0:
