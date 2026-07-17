@@ -1,0 +1,7 @@
+{
+    "validation_loss": 4.9373,
+    "perplexity": 139.4001,
+    "evaluation_tokens_per_sec": 34164.73,
+    "total_eval_time_sec": 982.44,
+    "device": "cuda"
+}
