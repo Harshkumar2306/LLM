@@ -14,9 +14,28 @@ The frontend and backend deployment stack for this model can be found in the sis
 * 🌐 **Frontend (Chat UI):** [https://axiom-sable-six.vercel.app/](https://axiom-sable-six.vercel.app/)
 * ⚙️ **Backend API:** `https://axiom-zov1.onrender.com/generate`
 
+**📄 Read the Full Technical Whitepaper:** [REPORT.md](./REPORT.md)
+
 ---
 
 ## 🏗️ The Architecture (17.86M Parameters)
+
+```mermaid
+graph TD
+    A[Input Text] --> B[GPT-2 BPE Tokenizer]
+    B --> C[Token Embeddings]
+    C --> D[Positional Embeddings]
+    
+    subgraph Transformer Block
+        D --> E[Multi-Head Causal Self-Attention]
+        E --> F[SwiGLU Feed-Forward Network]
+    end
+    
+    F --> G[Logits / Probabilities]
+    G --> H[Next Token Prediction]
+    
+    style Transformer Block fill:#1e1e1e,stroke:#3b82f6,stroke-width:2px,color:#fff
+```
 
 We didn't just build a basic neural network; we built a modern **Decoder-Only Transformer** mirroring the foundational architecture of industry-leading models like GPT-4 and Llama 3, scaled down to 17.86 Million parameters so it can be trained on consumer hardware.
 
