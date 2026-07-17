@@ -1,63 +1,74 @@
-# 🧠 LLM Experiments: Building GPT from Scratch
+# 🧠 Axiom Core: Building a PyTorch LLM from Scratch
 
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Google Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252)
 
-A comprehensive, end-to-end framework for building, training, and evaluating Large Language Models (LLMs) from scratch. This repository contains the mathematical implementation of a custom GPT-style autoregressive language model, integrated with a fully automated Google Colab + Google Drive training pipeline.
+A comprehensive, end-to-end framework for building, training, and evaluating a Large Language Model (LLM) completely from scratch. 
 
-The purpose of this repository is to conduct rigorous architectural experiments (Baseline vs. RoPE vs. SwiGLU) on a ~17.6M parameter model trained on the TinyShakespeare dataset.
+This repository contains the pure mathematical implementation of **Axiom**, a custom generative AI built on a modern Decoder-Only Transformer architecture. It includes everything from the raw PyTorch neural network blocks to a fully automated Google Colab + Google Drive training pipeline.
 
----
-
-## 🔬 Architectural Experiments & Results
-
-We trained three distinct architectures to exactly 10,000 iterations on a T4 GPU using FlashAttention. To ensure scientific validity, all models were mathematically scaled to maintain parity at **~17.6 Million Parameters**.
-
-| Architecture | Parameters | Training Time | Validation Loss | Perplexity | Generation Speed | Branch |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Baseline** (Absolute + GELU) | 17.67M | ~60 mins | **4.86** | **130.0** | 318 tok/sec | `main` |
-| **SwiGLU** (Absolute + SwiGLU) | 17.67M | ~57 mins | **4.93** | **139.4** | 278 tok/sec | `exp/swiglu` |
-| **RoPE** (Rotary + GELU) | 17.60M | ~60 mins | **5.34** | **208.8** | 242 tok/sec | `exp/rope` |
-
-> **Research Takeaway:** 
-> Modern LLM techniques like RoPE and SwiGLU are designed to extrapolate efficiently across trillions of tokens and billions of parameters. When downscaled to a tiny 17M parameter model on a small dataset, the rigid, highly-parameterized "Baseline" architecture (Absolute Embeddings) actually overfits the short-context positions slightly better. This perfectly reproduces known scaling-law phenomena.
+The frontend and backend deployment stack for this model can be found in the sister repository: [Axiom Deployment](https://github.com/Harshkumar2306/Axiom).
 
 ---
 
-## 🚀 Features
+## 🏗️ The Architecture (17.86M Parameters)
 
-- **Custom PyTorch GPT Engine**: A fully functional, mathematical implementation of multi-head causal self-attention.
-- **FlashAttention**: Natively dispatches to PyTorch's optimized `F.scaled_dot_product_attention` to fuse QKV kernels and drastically accelerate GPU training.
-- **Automated Colab Pipeline**: A notebook (`colab_train.ipynb`) that automatically clones the repository, mounts Google Drive, pre-processes the dataset, and seamlessly resumes training from the latest checkpoint.
-- **Mixed-Precision Training**: Utilizes `torch.amp.GradScaler` (FP16) for reduced memory footprint.
-- **Gradient Accumulation**: Bypasses GPU memory limits by accumulating gradients across micro-batches.
-- **Rigorous Evaluation**: Sliding-window validation loss calculation to accurately measure model perplexity.
+We didn't just build a basic neural network; we built a modern **Decoder-Only Transformer** mirroring the foundational architecture of industry-leading models like GPT-4 and Llama 3, scaled down to 17.86 Million parameters so it can be trained on consumer hardware.
+
+### 1. Tokenization (GPT-2 BPE)
+Before feeding text into the network, we encode it using the GPT-2 Byte-Pair Encoding (BPE) tokenizer. This allows the AI to perfectly understand sub-words and syllables while keeping its vocabulary strictly limited to exactly **50,257** tokens.
+
+### 2. Multi-Head Causal Self-Attention
+The core engine. The model uses 8 parallel attention heads to mathematically "look" at surrounding words to gather deep context. We apply a **Causal Mask** to force the AI to only look at past tokens, training it strictly as an autoregressive next-token predictor.
+
+### 3. SwiGLU Activation Function
+Older models rely on `ReLU` or `GELU` for feed-forward activation. Axiom is upgraded with **SwiGLU** (Swish-Gated Linear Unit)—the exact same bleeding-edge mathematical activation function used by Meta's **Llama 3**. SwiGLU splits the data stream, applying a non-linear gate to one side, which allows the neural network to learn much richer, more nuanced representations of the English language without needing to add millions of extra parameters.
+
+### 4. Positional Memory
+Since Transformers process all words simultaneously rather than left-to-right, we inject physical location data directly into the mathematical embeddings of every token so the model possesses a strict sense of time and word order.
+
+---
+
+## 🔬 The Training Methodology
+
+The model was trained on the `TinyShakespeare` dataset (a 1MB text file containing the compiled works of William Shakespeare). 
+
+1. **Random Batching:** A custom Data Loader grabs random sequences of 1,024 tokens and feeds them in parallel batches to the GPU to drastically accelerate training.
+2. **Cross-Entropy Loss:** The model predicts a sequence, and we use Cross-Entropy Loss to mathematically calculate exactly how wrong its predictions were compared to the actual Shakespeare script.
+3. **AdamW Optimizer & Backpropagation:** We use the `AdamW` optimizer (with gradient clipping to prevent exploding math) to slightly tweak the values of all 17.86 million parameters in the exact opposite direction of the error.
+4. **Validation Checkpointing (90/10 Split):** To ensure the model learns English structure rather than just memorizing the script, we test it on a 10% held-out validation set. The `engine` automatically saves a `best.pt` file every time the model achieves a new high score on the unseen validation data.
+
+After 10,000 iterations, the randomized math settles, and the model masters the statistical patterns, rhythm, and vocabulary of William Shakespeare.
 
 ---
 
 ## 📂 Repository Structure
 
+The repository has been professionally structured for scalability and cleanliness:
+
 ```text
 LLM/
-├── LLM Model/             # AI Neural Network & Training
-│   ├── core/              # GPT Architecture (model, attention, ffn)
-│   ├── engine/            # Training Loop (trainer.py)
-│   ├── data/              # Dataset & Tokenizer
-│   ├── scripts/           # Execution Scripts (train, evaluate, generate)
-│   └── colab_train.ipynb  # Cloud Training Notebook
+├── core/              # The PyTorch Architecture (model, attention, ffn)
+├── data/              # The Dataset & Tokenizer scripts
+├── engine/            # The Training Loop (trainer.py)
+├── scripts/           # Execution Scripts (train, evaluate, generate)
+├── utils/             # Helper functions and metrics
+├── config/            # Hyperparameter configs (train_config.yaml)
+├── colab_train.ipynb  # 1-Click Cloud Training Notebook
+└── requirements.txt   # Python dependencies
 ```
 
 ---
 
 ## 💻 Usage & Reproduction
 
-To reproduce these experiments locally or on a cloud GPU:
+To train this exact model locally or on a cloud GPU (AWS, RunPod, Google Colab):
 
 ### 1. Setup & Data Preparation
 ```bash
 git clone https://github.com/Harshkumar2306/LLM.git
-cd LLM/"LLM Model"
+cd LLM
 pip install -r requirements.txt
 
 # Download and tokenize the TinyShakespeare dataset
@@ -65,7 +76,7 @@ python scripts/prepare_data.py --input data/input.txt --outdir data/
 ```
 
 ### 2. Training
-Train the model. The trainer will automatically checkpoint to the `--out_dir`.
+Start the training loop. The trainer uses mixed-precision (FP16) and gradient accumulation to bypass GPU memory limits.
 ```bash
 python scripts/train.py \
     --train_bin data/train.bin \
@@ -73,32 +84,17 @@ python scripts/train.py \
     --device cuda \
     --batch_size 4 \
     --grad_accum_steps 4 \
-    --out_dir runs/my_experiment
+    --out_dir runs/axiom_v1
 ```
 
-### 3. Evaluation & Benchmarking
-Run the rigorous sliding-window evaluation and measure system throughput.
-```bash
-python scripts/evaluate.py --checkpoint runs/my_experiment/best.pt --val_bin data/val.bin --device cuda
-python scripts/benchmark.py --device cuda
-```
-
-### 4. Text Generation
-Test the model's predictive capabilities by giving it a prompt.
+### 3. Text Generation
+Test the model's predictive capabilities by feeding it a prompt.
 ```bash
 python scripts/generate.py \
-    --checkpoint runs/my_experiment/best.pt \
+    --checkpoint runs/axiom_v1/best.pt \
     --prompt "ROMEO:" \
     --device cuda
 ```
 
 ---
-
-## 🤝 Branches
-
-To explore the specific mathematical implementations of the different architectures, check out their respective branches:
-- **`main`**: The standard GPT-2 Baseline (Absolute Embeddings + GELU).
-- **`exp/rope`**: The implementation of Rotary Position Embeddings via polar complex geometry.
-- **`exp/swiglu`**: The implementation of the Swish-Gated Linear Unit activation mechanism.
-
 *Developed with ❤️ as a deep dive into Large Language Model Architectures.*
