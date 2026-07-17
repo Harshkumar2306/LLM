@@ -46,9 +46,6 @@ LLM/
 │   ├── data/              # Dataset & Tokenizer
 │   ├── scripts/           # Execution Scripts (train, evaluate, generate)
 │   └── colab_train.ipynb  # Cloud Training Notebook
-└── LLM Web/               # Web Application
-    ├── backend/           # FastAPI Server (for Hugging Face Spaces)
-    └── frontend/          # Vite React App (for Vercel)
 ```
 
 ---
