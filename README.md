@@ -10,6 +10,10 @@ This repository contains the pure mathematical implementation of **Axiom**, a cu
 
 The frontend and backend deployment stack for this model can be found in the sister repository: [Axiom Deployment](https://github.com/Harshkumar2306/Axiom).
 
+**🔥 Live Demo:**
+* 🌐 **Frontend (Chat UI):** [https://axiom-sable-six.vercel.app/](https://axiom-sable-six.vercel.app/)
+* ⚙️ **Backend API:** `https://axiom-zov1.onrender.com/generate`
+
 ---
 
 ## 🏗️ The Architecture (17.86M Parameters)
