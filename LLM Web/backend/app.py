@@ -5,8 +5,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
-# Ensure the root of the repository is in the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Ensure the LLM Model directory is in the Python path
+repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+llm_model_path = os.path.join(repo_root, "LLM Model")
+sys.path.append(llm_model_path)
 
 from config.gpt_config import GPTConfig
 from core.model import GPT

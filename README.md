@@ -40,24 +40,15 @@ We trained three distinct architectures to exactly 10,000 iterations on a T4 GPU
 
 ```text
 LLM/
-├── core/                  # Neural Network Architecture
-│   ├── model.py           # The primary GPT module
-│   ├── attention.py       # Causal Self-Attention & FlashAttention
-│   ├── block.py           # Transformer Blocks
-│   ├── embeddings.py      # Positional & Token Embeddings
-│   └── ffn.py             # Feed-Forward Networks (GELU/SwiGLU)
-├── engine/                # Training Infrastructure
-│   └── trainer.py         # Advanced Training Loop (Checkpoints, AMP)
-├── data/                  # Data Processing
-│   ├── dataset.py         # PyTorch Dataset implementation
-│   └── tokenizer.py       # Character-level tokenization
-├── scripts/               # Execution Scripts
-│   ├── prepare_data.py    # Downloads and compresses the dataset
-│   ├── train.py           # Main training script
-│   ├── evaluate.py        # Rigorous validation loss calculation
-│   ├── benchmark.py       # System speed/memory profiling
-│   └── generate.py        # Autoregressive text generation
-└── colab_train.ipynb      # The automated cloud pipeline
+├── LLM Model/             # AI Neural Network & Training
+│   ├── core/              # GPT Architecture (model, attention, ffn)
+│   ├── engine/            # Training Loop (trainer.py)
+│   ├── data/              # Dataset & Tokenizer
+│   ├── scripts/           # Execution Scripts (train, evaluate, generate)
+│   └── colab_train.ipynb  # Cloud Training Notebook
+└── LLM Web/               # Web Application
+    ├── backend/           # FastAPI Server (for Hugging Face Spaces)
+    └── frontend/          # Vite React App (for Vercel)
 ```
 
 ---
@@ -69,7 +60,7 @@ To reproduce these experiments locally or on a cloud GPU:
 ### 1. Setup & Data Preparation
 ```bash
 git clone https://github.com/Harshkumar2306/LLM.git
-cd LLM
+cd LLM/"LLM Model"
 pip install -r requirements.txt
 
 # Download and tokenize the TinyShakespeare dataset
