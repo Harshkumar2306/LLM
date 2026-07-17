@@ -6,7 +6,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.gpt_config import GPTConfig
 from core.attention import CausalSelfAttention
-from core.ffn import FeedForward
+from core.ffn import SwiGLUFFN
 
 class Block(nn.Module):
     """
@@ -23,7 +23,7 @@ class Block(nn.Module):
         
         # Core mathematical primitives
         self.attn = CausalSelfAttention(config)
-        self.mlp = FeedForward(config)
+        self.mlp = SwiGLUFFN(config)
 
     def forward(self, x: torch.Tensor, use_flash: bool = True) -> torch.Tensor:
         """
